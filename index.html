@@ -1,0 +1,1186 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#132430">
+<title>Etiquetas NFC — leer y escribir</title>
+<style>
+  :root{
+    --ink:#132430;
+    --ink2:#4a616f;
+    --line:#ccd7de;
+    --paper:#e9edf0;
+    --card:#ffffff;
+    --signal:#0b5fd0;
+    --signal-soft:#e3ecfb;
+    --ok:#0a6b4a;
+    --ok-soft:#e1f2ea;
+    --warn:#a32b1f;
+    --warn-soft:#fae8e6;
+    --lock:#8a5a00;
+    --lock-soft:#fdf1da;
+    --mono: ui-monospace, "Roboto Mono", Menlo, Consolas, monospace;
+    --sans: Roboto, "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:var(--sans);
+    background:var(--paper);
+    color:var(--ink);
+    font-size:16px;
+    line-height:1.45;
+    -webkit-text-size-adjust:100%;
+    padding-bottom:76px;
+  }
+  .barra{
+    position:sticky;top:0;z-index:20;
+    background:var(--ink);color:#eef3f6;
+    padding:10px 14px calc(10px + env(safe-area-inset-top,0px));
+    padding-top:calc(10px + env(safe-area-inset-top,0px));
+    display:flex;align-items:center;gap:10px;justify-content:space-between;
+  }
+  .barra h1{
+    font-size:17px;font-weight:600;margin:0;letter-spacing:-0.01em;
+  }
+  .pastilla{
+    font-size:12.5px;font-weight:600;padding:4px 9px;border-radius:99px;
+    background:#2c4150;color:#cfe0ee;white-space:nowrap;
+  }
+  .pastilla.si{background:#0f4b2f;color:#b9ecd0}
+  .pastilla.no{background:#5c1f18;color:#f6c9c3}
+
+  main{padding:14px 14px 24px;max-width:620px;margin:0 auto}
+  section[hidden]{display:none}
+
+  .aviso{
+    border:1px solid var(--line);border-left:4px solid var(--warn);
+    background:var(--warn-soft);border-radius:10px;
+    padding:11px 13px;font-size:14.5px;margin:0 0 14px;
+  }
+  .aviso b{display:block;margin-bottom:2px}
+
+  /* zona de contacto */
+  .zona{
+    background:var(--card);border:1px solid var(--line);border-radius:16px;
+    padding:20px 16px;text-align:center;margin-bottom:14px;
+  }
+  .antena{
+    width:132px;height:132px;margin:2px auto 12px;position:relative;
+    display:grid;place-items:center;border-radius:50%;
+    background:var(--signal-soft);
+    transition:background .2s ease;
+  }
+  .antena svg{width:64px;height:64px;color:var(--signal);transition:color .2s ease}
+  .antena::after{
+    content:"";position:absolute;inset:-6px;border-radius:50%;
+    border:2px solid var(--signal);opacity:0;
+  }
+  .zona[data-estado="esperando"] .antena::after{animation:pulso 1.6s ease-out infinite}
+  .zona[data-estado="ok"] .antena{background:var(--ok-soft)}
+  .zona[data-estado="ok"] .antena svg{color:var(--ok)}
+  .zona[data-estado="error"] .antena{background:var(--warn-soft)}
+  .zona[data-estado="error"] .antena svg{color:var(--warn)}
+  @keyframes pulso{
+    0%{opacity:.85;transform:scale(.82)}
+    100%{opacity:0;transform:scale(1.15)}
+  }
+  @media (prefers-reduced-motion: reduce){
+    .zona[data-estado="esperando"] .antena::after{animation:none;opacity:.5}
+  }
+  .zona p{margin:0 0 14px;color:var(--ink2);font-size:15px}
+  .zona p strong{color:var(--ink);font-weight:600}
+
+  /* botones */
+  button{font-family:inherit;font-size:16px}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    min-height:48px;padding:0 18px;border-radius:10px;border:1px solid transparent;
+    background:var(--signal);color:#fff;font-weight:600;cursor:pointer;width:100%;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn.fantasma{background:var(--card);color:var(--ink);border-color:var(--line)}
+  .btn.alto{background:var(--warn)}
+  .btn.bloqueo{background:var(--card);color:var(--lock);border-color:#e3c689}
+  .btn.chico{min-height:38px;font-size:14px;padding:0 12px;width:auto}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .fila-btn{display:flex;gap:8px;flex-wrap:wrap}
+  .fila-btn .btn{width:auto;flex:1 1 46%}
+
+  /* tarjetas de contenido */
+  .bloque{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:14px;margin-bottom:14px;
+  }
+  .bloque > h2{
+    font-size:15.5px;font-weight:600;margin:0 0 10px;letter-spacing:-0.01em;
+  }
+  .bloque > h2 + p{margin-top:-6px}
+  .bloque p.nota{color:var(--ink2);font-size:14px;margin:0 0 12px}
+
+  .serie{
+    display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+    padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--line);
+  }
+  .serie span{color:var(--ink2);font-size:13.5px}
+  .serie code{font-family:var(--mono);font-size:15px;word-break:break-all}
+
+  .rec{
+    border:1px solid var(--line);border-left:3px solid var(--signal);
+    border-radius:10px;padding:10px 12px;margin-bottom:9px;background:#fbfcfd;
+  }
+  .rec .cab{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .rec .tipo{font-weight:600;font-size:14.5px}
+  .chip{
+    font-size:12px;color:var(--ink2);background:var(--paper);
+    border-radius:99px;padding:2px 8px;font-family:var(--mono);
+  }
+  .valor{
+    font-size:15px;white-space:pre-wrap;word-break:break-word;margin:0;
+  }
+  .valor.mono{font-family:var(--mono);font-size:13.5px}
+  .rec details{margin-top:7px}
+  .rec summary{font-size:13.5px;color:var(--signal);cursor:pointer}
+  .rec details pre{
+    font-family:var(--mono);font-size:12.5px;background:var(--ink);color:#d7e6f2;
+    padding:9px;border-radius:8px;overflow-x:auto;margin:7px 0 0;
+  }
+  table.campos{border-collapse:collapse;width:100%;font-size:14px;margin-top:2px}
+  table.campos td{border-bottom:1px solid var(--line);padding:5px 4px;vertical-align:top}
+  table.campos td:first-child{color:var(--ink2);width:38%;word-break:break-word}
+
+  /* formulario */
+  label.etq{display:block;font-size:13.5px;color:var(--ink2);margin:0 0 4px}
+  input[type=text],input[type=number],input[type=url],select,textarea{
+    width:100%;font-family:inherit;font-size:16px;color:var(--ink);
+    background:#fff;border:1px solid var(--line);border-radius:9px;
+    padding:11px 12px;min-height:46px;
+  }
+  textarea{min-height:88px;resize:vertical}
+  input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,summary:focus-visible{
+    outline:3px solid #7fb0f5;outline-offset:1px;
+  }
+  .reg{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;background:#fbfcfd}
+  .reg .reg-cab{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+  .reg .reg-cab select{flex:1}
+  .quitar{
+    border:1px solid var(--line);background:#fff;border-radius:9px;
+    width:46px;min-height:46px;color:var(--warn);font-size:20px;cursor:pointer;flex:none;
+  }
+  .par{display:flex;gap:8px;margin-bottom:8px}
+  .par input{flex:1;min-width:0}
+  .opcion{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line)}
+  .opcion:first-of-type{border-top:0}
+  .opcion input[type=checkbox]{width:22px;height:22px;margin:2px 0 0;flex:none;accent-color:var(--signal)}
+  .opcion .txt{font-size:14.5px}
+  .opcion .txt small{display:block;color:var(--ink2);font-size:13px;line-height:1.35}
+  .medida{font-size:13.5px;color:var(--ink2);margin:10px 0 0}
+  .medida b{font-family:var(--mono);color:var(--ink)}
+  .contador{font-size:34px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-0.02em;margin:0}
+  .contador small{display:block;font-size:13.5px;font-weight:400;color:var(--ink2);letter-spacing:0}
+
+  /* registro */
+  .lista-reg{list-style:none;margin:0;padding:0}
+  .lista-reg li{border-top:1px solid var(--line);padding:9px 0;font-size:14.5px}
+  .lista-reg li:first-child{border-top:0}
+  .lista-reg .meta{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;color:var(--ink2);font-size:12.5px}
+  .lista-reg .meta b{color:var(--ink);font-size:13.5px}
+  .lista-reg .res{word-break:break-word}
+  .vacio{color:var(--ink2);font-size:14.5px;margin:0}
+
+  /* ayuda */
+  .ayuda h3{font-size:14.5px;margin:16px 0 5px}
+  .ayuda h3:first-child{margin-top:0}
+  .ayuda p,.ayuda li{font-size:14.5px;color:#28404f}
+  .ayuda ul{margin:5px 0 0;padding-left:20px}
+  .ayuda li{margin-bottom:5px}
+
+  /* pestañas */
+  nav.pestanas{
+    position:fixed;left:0;right:0;bottom:0;z-index:20;
+    background:var(--card);border-top:1px solid var(--line);
+    display:grid;grid-template-columns:repeat(4,1fr);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  nav.pestanas button{
+    border:0;background:none;padding:9px 2px 10px;cursor:pointer;
+    color:var(--ink2);font-size:12.5px;font-weight:500;
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    border-top:3px solid transparent;margin-top:-1px;
+  }
+  nav.pestanas button svg{width:22px;height:22px}
+  nav.pestanas button[aria-selected="true"]{color:var(--signal);border-top-color:var(--signal)}
+
+  input[type=file]{width:100%;font-size:14.5px;padding:11px;border:1px dashed var(--line);border-radius:10px;background:#fbfcfd}
+  .pendiente{font-size:15px;margin:0 0 10px;padding:11px 12px;background:var(--signal-soft);border-radius:10px;word-break:break-word}
+  .pendiente b{font-weight:600}
+  ol.filas{margin:9px 0 0;padding-left:24px;font-size:14px;max-height:250px;overflow:auto}
+  ol.filas li{padding:3px 0;word-break:break-word}
+  ol.filas li[data-est="grabada"]{color:var(--ok)}
+  ol.filas li[data-est="omitida"]{color:var(--ink2);text-decoration:line-through}
+  #detalleFilas summary{font-size:14px;color:var(--signal);cursor:pointer;margin-top:4px}
+
+  #mensaje{
+    position:fixed;left:12px;right:12px;bottom:82px;z-index:30;
+    background:var(--ink);color:#eaf2f7;border-radius:10px;
+    padding:11px 13px;font-size:14.5px;box-shadow:0 6px 22px rgba(19,36,48,.28);
+  }
+  #mensaje[hidden]{display:none}
+</style>
+</head>
+<body>
+
+<header class="barra">
+  <h1>Etiquetas NFC</h1>
+  <span class="pastilla" id="pastillaEstado">Revisando…</span>
+</header>
+
+<main>
+  <div class="aviso" id="avisoSoporte" hidden></div>
+
+  <!-- ===================== LEER ===================== -->
+  <section id="tab-leer">
+    <div class="zona" id="zonaLeer" data-estado="reposo">
+      <div class="antena">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
+          <path d="M5.5 3.5C3.3 6 2 8.9 2 12s1.3 6 3.5 8.5"/>
+          <path d="M9 6.5C7.5 8 6.7 9.9 6.7 12s.8 4 2.3 5.5"/>
+          <path d="M18.5 3.5C20.7 6 22 8.9 22 12s-1.3 6-3.5 8.5"/>
+          <path d="M15 6.5c1.5 1.5 2.3 3.4 2.3 5.5s-.8 4-2.3 5.5"/>
+          <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/>
+        </svg>
+      </div>
+      <p id="textoLeer" aria-live="polite">Inicia la lectura y acerca la etiqueta a la parte trasera del teléfono.</p>
+      <div class="fila-btn">
+        <button class="btn" id="btnLeer">Iniciar lectura</button>
+        <button class="btn fantasma" id="btnDetenerLeer" disabled>Detener</button>
+      </div>
+    </div>
+
+    <div class="bloque" id="bloqueLectura" hidden>
+      <h2>Última etiqueta leída</h2>
+      <div class="serie">
+        <span>Número de serie</span>
+        <code id="serieLeida">—</code>
+      </div>
+      <div id="registrosLeidos"></div>
+      <div class="fila-btn" style="margin-top:12px">
+        <button class="btn fantasma chico" id="btnCopiarTodo">Copiar contenido</button>
+        <button class="btn fantasma chico" id="btnClonar">Pasar a escritura</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ESCRIBIR ===================== -->
+  <section id="tab-escribir" hidden>
+    <div class="zona" id="zonaEscribir" data-estado="reposo">
+      <div class="antena">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3.5 6.5C2 8.2 1.2 10 1.2 12s.8 3.8 2.3 5.5"/>
+          <path d="M20.5 6.5c1.5 1.7 2.3 3.5 2.3 5.5s-.8 3.8-2.3 5.5"/>
+          <path d="M12 15.5V5"/>
+          <path d="M8.5 8.5 12 5l3.5 3.5"/>
+          <circle cx="12" cy="18.6" r="1.4" fill="currentColor" stroke="none"/>
+        </svg>
+      </div>
+      <p id="textoEscribir" aria-live="polite">Escribe el texto abajo y luego acerca la etiqueta.</p>
+      <p class="contador" id="contadorSerie" hidden>0<small>etiquetas escritas en esta serie</small></p>
+      <div class="fila-btn">
+        <button class="btn" id="btnEscribir">Escribir en la etiqueta</button>
+        <button class="btn fantasma" id="btnDetenerEscribir" disabled>Cancelar</button>
+      </div>
+    </div>
+
+    <div class="bloque">
+      <h2>Texto que se va a grabar</h2>
+      <label class="etq" for="textoGrabar">Escribe aquí lo que llevará la etiqueta</label>
+      <textarea id="textoGrabar" placeholder="Matrícula"></textarea>
+      <p class="medida" id="medida">Tamaño aproximado: <b>0 bytes</b></p>
+    </div>
+
+    <div class="bloque">
+      <h2>Escribir una lista desde un archivo</h2>
+      <p class="nota">Sube un CSV o un Excel con los textos en una columna. Se graba una etiqueta por fila, en orden.</p>
+      <input type="file" id="archivoLista" accept=".csv,.txt,.xlsx,.xlsm,.xls">
+      <div id="cajaColumna" hidden style="margin-top:12px">
+        <label class="etq" for="selColumna">Columna con el texto</label>
+        <select id="selColumna"></select>
+        <div class="opcion" style="margin-top:8px">
+          <input type="checkbox" id="optEncabezado" checked>
+          <span class="txt"><label for="optEncabezado">La primera fila son los títulos de las columnas</label></span>
+        </div>
+      </div>
+      <div id="avanceLista" hidden style="margin-top:12px">
+        <p class="contador" id="avanceNum">0<small>de 0 filas grabadas</small></p>
+        <p class="pendiente" id="filaActual"></p>
+        <details id="detalleFilas"><summary>Ver los textos de la lista</summary><ol class="filas" id="olFilas"></ol></details>
+        <div class="fila-btn" style="margin-top:12px">
+          <button class="btn" id="btnEscribirLista">Escribir la lista</button>
+          <button class="btn fantasma" id="btnSaltar">Saltar esta fila</button>
+        </div>
+        <div class="fila-btn" style="margin-top:8px">
+          <button class="btn fantasma chico" id="btnReiniciarLista">Reiniciar avance</button>
+          <button class="btn fantasma chico" id="btnQuitarLista">Quitar la lista</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="bloque">
+      <h2>Opciones</h2>
+      <div class="opcion">
+        <input type="checkbox" id="optSobrescribir" checked>
+        <span class="txt"><label for="optSobrescribir">Sobrescribir lo que ya tenga la etiqueta</label>
+        <small>Si lo desactivas, sólo escribe en etiquetas vacías.</small></span>
+      </div>
+      <div class="opcion">
+        <input type="checkbox" id="optSerie">
+        <span class="txt"><label for="optSerie">Escritura en serie</label>
+        <small>Graba una etiqueta tras otra sin volver a tocar el botón. Retira cada etiqueta antes de acercar la siguiente.</small></span>
+      </div>
+      <div class="opcion">
+        <input type="checkbox" id="optNumerar">
+        <span class="txt"><label for="optNumerar">Numeración automática</label>
+        <small>Escribe <code>{n}</code> dentro de un texto o campo y se reemplaza por el número, sumando 1 en cada etiqueta.</small></span>
+      </div>
+      <div id="cajaNumero" hidden style="margin-top:6px">
+        <label class="etq" for="numInicial">Número inicial (los ceros se conservan)</label>
+        <input type="text" id="numInicial" value="0001" inputmode="numeric">
+      </div>
+    </div>
+
+    <div class="bloque">
+      <h2>Acciones sobre la etiqueta</h2>
+      <p class="nota">Estas dos acciones también necesitan que acerques la etiqueta.</p>
+      <div class="fila-btn">
+        <button class="btn alto" id="btnBorrar">Borrar etiqueta</button>
+        <button class="btn bloqueo" id="btnBloquear">Bloquear como sólo lectura</button>
+      </div>
+      <p class="medida">El bloqueo es permanente: la etiqueta ya no se podrá volver a grabar nunca.</p>
+    </div>
+  </section>
+
+  <!-- ===================== REGISTRO ===================== -->
+  <section id="tab-registro" hidden>
+    <div class="bloque">
+      <h2>Movimientos de esta sesión</h2>
+      <p class="nota" id="resumenRegistro">Aquí se anota cada lectura y cada escritura, con hora y número de serie.</p>
+      <ul class="lista-reg" id="listaRegistro"><li><p class="vacio">Todavía no hay movimientos.</p></li></ul>
+      <div class="fila-btn" style="margin-top:12px">
+        <button class="btn fantasma chico" id="btnCSV">Descargar CSV</button>
+        <button class="btn fantasma chico" id="btnLimpiar">Vaciar registro</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== AYUDA ===================== -->
+  <section id="tab-ayuda" hidden>
+    <div class="bloque ayuda">
+      <h2>Qué necesitas para que funcione</h2>
+      <h3>Teléfono y navegador</h3>
+      <ul>
+        <li>Android con NFC, usando Chrome o Edge (versión 89 o más nueva).</li>
+        <li>NFC encendido en los ajustes del teléfono.</li>
+        <li>El iPhone no permite leer ni escribir etiquetas desde el navegador; ahí esta app no va a funcionar.</li>
+      </ul>
+      <h3>Cómo abrir el archivo</h3>
+      <ul>
+        <li>Lo más seguro es subir el archivo a un alojamiento gratuito con https (por ejemplo GitHub Pages o Netlify Drop) y abrir esa dirección en el teléfono.</li>
+        <li>También puedes abrirlo como archivo local en Chrome de Android; si el navegador no da permiso de NFC, verás el aviso rojo arriba y entonces sí hace falta el https.</li>
+        <li>No necesita internet para trabajar: todo ocurre en el teléfono.</li>
+      </ul>
+      <h3>Etiquetas y capacidad</h3>
+      <ul>
+        <li>NTAG213: unos 132 bytes útiles. Alcanza para un texto corto o un identificador.</li>
+        <li>NTAG215: unos 492 bytes. NTAG216: unos 872 bytes.</li>
+        <li>El tamaño aproximado del texto se muestra debajo del campo, en la pestaña Escribir.</li>
+      </ul>
+      <h3>Si no detecta la etiqueta</h3>
+      <ul>
+        <li>Mueve la etiqueta despacio por la parte de atrás del teléfono: la antena suele estar en la mitad superior.</li>
+        <li>Quita la funda si es gruesa o tiene metal, y separa la etiqueta de superficies metálicas.</li>
+        <li>Una etiqueta bloqueada como sólo lectura se puede leer pero ya no se puede regrabar.</li>
+        <li>Si aparece un error al escribir, casi siempre es que la etiqueta se retiró antes de terminar o que el contenido no cabe.</li>
+      </ul>
+      <h3>Escribir una lista</h3>
+      <ul>
+        <li>El archivo puede ser CSV o Excel. Sólo se usa la columna que elijas y la primera hoja del libro.</li>
+        <li>Las filas vacías se ignoran. Se graba una etiqueta por fila, en el orden del archivo.</li>
+        <li>El avance se guarda en el teléfono: si cierras la página, al volver retoma en la fila donde quedó.</li>
+        <li>El CSV funciona sin internet. El Excel necesita conexión la primera vez que lo abres; si no la hay, guarda el archivo como CSV.</li>
+      </ul>
+      <h3>Qué se graba</h3>
+      <ul>
+        <li>Sólo texto, en español. Es el formato más compatible: cualquier teléfono con NFC lo lee.</li>
+        <li>Al leer, la app sí interpreta etiquetas con enlaces u otros formatos, aunque aquí no se escriban.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<nav class="pestanas" role="tablist">
+  <button role="tab" aria-selected="true" data-tab="leer">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M7 4.5C5.4 6.4 4.6 9 4.6 12s.8 5.6 2.4 7.5"/><path d="M17 4.5c1.6 1.9 2.4 4.5 2.4 7.5s-.8 5.6-2.4 7.5"/><circle cx="12" cy="12" r="2" fill="currentColor" stroke="none"/></svg>
+    Leer
+  </button>
+  <button role="tab" aria-selected="false" data-tab="escribir">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4l10.5-10.5a2.1 2.1 0 0 0-3-3L5 13v4"/><path d="M14.5 5.5 18.5 9.5"/></svg>
+    Escribir
+  </button>
+  <button role="tab" aria-selected="false" data-tab="registro">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M8.5 9h7M8.5 12.5h7M8.5 16h4"/></svg>
+    Registro
+  </button>
+  <button role="tab" aria-selected="false" data-tab="ayuda">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M9.7 9.4a2.4 2.4 0 0 1 4.6.8c0 1.6-2.3 1.9-2.3 3.3"/><circle cx="12" cy="16.8" r=".9" fill="currentColor" stroke="none"/></svg>
+    Ayuda
+  </button>
+</nav>
+
+<div id="mensaje" role="status" hidden></div>
+
+<script>
+(function(){
+  "use strict";
+  var $ = function(s,r){ return (r||document).querySelector(s); };
+  var $$ = function(s,r){ return Array.prototype.slice.call((r||document).querySelectorAll(s)); };
+
+  var soportado = ('NDEFReader' in window);
+  var movimientos = [];
+  var ultimaLectura = null;
+  var abortoLectura = null;
+  var abortoEscritura = null;
+  var enSerie = false;
+  var escritas = 0;
+
+  /* ---------- guardado opcional ---------- */
+  var guarda = {
+    leer: function(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } },
+    poner: function(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+  };
+
+  /* ---------- utilidades ---------- */
+  function aviso(txt){
+    var caja = $('#mensaje');
+    caja.textContent = txt;
+    caja.hidden = false;
+    clearTimeout(aviso.t);
+    aviso.t = setTimeout(function(){ caja.hidden = true; }, 3800);
+  }
+  function vibrar(p){ try{ if(navigator.vibrate) navigator.vibrate(p); }catch(e){} }
+  function hora(d){
+    var p = function(n){ return String(n).padStart(2,'0'); };
+    return p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+  }
+  function fechaHora(d){
+    var p = function(n){ return String(n).padStart(2,'0'); };
+    return p(d.getDate())+'/'+p(d.getMonth()+1)+'/'+d.getFullYear()+' '+hora(d);
+  }
+  function aHex(dv){
+    if(!dv) return '';
+    var b = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength), s = [];
+    for(var i=0;i<b.length;i++) s.push(b[i].toString(16).padStart(2,'0'));
+    return s.join(' ');
+  }
+  function bytesTexto(t){ return new TextEncoder().encode(t||'').length; }
+  function copiar(txt){
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(txt).then(function(){ aviso('Contenido copiado.'); },
+        function(){ aviso('No se pudo copiar.'); });
+    } else { aviso('Este navegador no permite copiar.'); }
+  }
+  function estado(zona, est, txt){
+    var z = $(zona === 'leer' ? '#zonaLeer' : '#zonaEscribir');
+    z.setAttribute('data-estado', est);
+    $(zona === 'leer' ? '#textoLeer' : '#textoEscribir').innerHTML = txt;
+  }
+
+  /* ---------- soporte ---------- */
+  function revisarSoporte(){
+    var pastilla = $('#pastillaEstado');
+    var caja = $('#avisoSoporte');
+    if(soportado){
+      pastilla.textContent = 'NFC disponible';
+      pastilla.className = 'pastilla si';
+      if(navigator.permissions && navigator.permissions.query){
+        navigator.permissions.query({name:'nfc'}).then(function(p){
+          if(p.state === 'denied'){
+            pastilla.textContent = 'Permiso negado';
+            pastilla.className = 'pastilla no';
+            caja.hidden = false;
+            caja.innerHTML = '<b>El permiso de NFC está negado</b>Ábrelo desde el candado de la barra de direcciones, en Permisos del sitio, y vuelve a intentar.';
+          }
+        }).catch(function(){});
+      }
+    } else {
+      pastilla.textContent = 'Sin NFC';
+      pastilla.className = 'pastilla no';
+      caja.hidden = false;
+      var motivo = !window.isSecureContext
+        ? 'La página no se está abriendo en un contexto seguro. Súbela a un alojamiento con https y ábrela desde ahí.'
+        : 'Este navegador no tiene la función de NFC. Usa Chrome o Edge en un Android con NFC; en iPhone no está disponible.';
+      caja.innerHTML = '<b>Aquí no se puede leer ni escribir</b>'+motivo+' El resto de la app sí se puede revisar.';
+      $('#btnLeer').disabled = true;
+      $('#btnEscribir').disabled = true;
+      $('#btnBorrar').disabled = true;
+      $('#btnBloquear').disabled = true;
+      $('#btnEscribirLista').disabled = true;
+    }
+  }
+
+  /* ---------- pestañas ---------- */
+  $$('nav.pestanas button').forEach(function(b){
+    b.addEventListener('click', function(){
+      $$('nav.pestanas button').forEach(function(o){ o.setAttribute('aria-selected', String(o===b)); });
+      ['leer','escribir','registro','ayuda'].forEach(function(t){
+        $('#tab-'+t).hidden = (t !== b.dataset.tab);
+      });
+      window.scrollTo({top:0});
+    });
+  });
+
+  /* ===================== LECTURA ===================== */
+  function nombreTipo(t){
+    if(t === 'text') return 'Texto';
+    if(t === 'url') return 'Enlace';
+    if(t === 'absolute-url') return 'Enlace absoluto';
+    if(t === 'mime') return 'Archivo o datos';
+    if(t === 'smart-poster') return 'Póster inteligente';
+    if(t === 'empty') return 'Vacío';
+    if(t === 'unknown') return 'Desconocido';
+    return t;
+  }
+
+  function leerRegistro(r){
+    var res = { tipo:r.recordType, titulo:nombreTipo(r.recordType), chips:[], valor:'', mono:false, campos:null, hex:aHex(r.data) };
+    try{
+      if(r.recordType === 'text'){
+        res.valor = new TextDecoder(r.encoding || 'utf-8').decode(r.data);
+        if(r.lang) res.chips.push('idioma '+r.lang);
+        if(r.encoding) res.chips.push(r.encoding);
+      } else if(r.recordType === 'url' || r.recordType === 'absolute-url'){
+        res.valor = new TextDecoder().decode(r.data);
+        res.mono = true;
+      } else if(r.recordType === 'mime'){
+        res.chips.push(r.mediaType || 'sin tipo');
+        var txt = new TextDecoder().decode(r.data);
+        if((r.mediaType||'').indexOf('json') >= 0){
+          try{
+            var obj = JSON.parse(txt);
+            if(obj && typeof obj === 'object' && !Array.isArray(obj)){
+              res.titulo = 'Campos';
+              res.campos = Object.keys(obj).map(function(k){ return [k, String(obj[k])]; });
+            } else { res.valor = txt; res.mono = true; }
+          }catch(e){ res.valor = txt; res.mono = true; }
+        } else if((r.mediaType||'').indexOf('text') === 0){
+          res.valor = txt;
+        } else {
+          res.valor = '('+ (r.data ? r.data.byteLength : 0) +' bytes de datos binarios)';
+          res.mono = true;
+        }
+      } else if(r.recordType === 'empty'){
+        res.valor = 'La etiqueta no tiene contenido grabado.';
+      } else if(r.recordType === 'smart-poster'){
+        var partes = [];
+        try{
+          r.toRecords().forEach(function(sub){
+            var s = leerRegistro(sub);
+            partes.push(s.titulo+': '+(s.valor || ''));
+          });
+        }catch(e){}
+        res.valor = partes.join('\n');
+      } else {
+        res.valor = r.data ? new TextDecoder().decode(r.data) : '';
+        res.mono = true;
+        if(r.mediaType) res.chips.push(r.mediaType);
+        if(r.id) res.chips.push('id '+r.id);
+      }
+    }catch(e){
+      res.valor = 'No se pudo interpretar este dato.';
+    }
+    if(r.data) res.chips.push(r.data.byteLength+' bytes');
+    return res;
+  }
+
+  function pintarLectura(serie, mensaje){
+    $('#bloqueLectura').hidden = false;
+    $('#serieLeida').textContent = serie || 'no informado';
+    var cont = $('#registrosLeidos');
+    cont.innerHTML = '';
+    var lista = [];
+    (mensaje.records || []).forEach(function(r){
+      var d = leerRegistro(r);
+      lista.push(d);
+      var div = document.createElement('div');
+      div.className = 'rec';
+      var cab = '<div class="cab"><span class="tipo">'+d.titulo+'</span>'+
+        d.chips.map(function(c){ return '<span class="chip">'+c+'</span>'; }).join('')+'</div>';
+      var cuerpo = '';
+      if(d.campos){
+        cuerpo = '<table class="campos">'+d.campos.map(function(p){
+          return '<tr><td>'+escapar(p[0])+'</td><td>'+escapar(p[1])+'</td></tr>';
+        }).join('')+'</table>';
+      } else {
+        cuerpo = '<p class="valor'+(d.mono?' mono':'')+'">'+escapar(d.valor)+'</p>';
+      }
+      var crudo = d.hex ? '<details><summary>Ver bytes</summary><pre>'+d.hex+'</pre></details>' : '';
+      div.innerHTML = cab + cuerpo + crudo;
+      cont.appendChild(div);
+    });
+    if(!(mensaje.records || []).length){
+      cont.innerHTML = '<div class="rec"><p class="valor">La etiqueta se detectó pero no trae ningún dato grabado.</p></div>';
+    }
+    ultimaLectura = { serie:serie, registros:lista, crudos:mensaje.records || [] };
+  }
+
+  function escapar(t){
+    return String(t == null ? '' : t)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function resumen(lista){
+    return lista.map(function(d){
+      if(d.campos) return d.campos.map(function(p){ return p[0]+'='+p[1]; }).join(' | ');
+      return (d.valor || '').replace(/\s+/g,' ').slice(0,120);
+    }).join(' || ');
+  }
+
+  $('#btnLeer').addEventListener('click', function(){
+    if(!soportado) return;
+    var lector;
+    try{ lector = new NDEFReader(); }catch(e){ return aviso('No se pudo iniciar el lector.'); }
+    abortoLectura = new AbortController();
+    lector.onreading = function(ev){
+      vibrar(60);
+      pintarLectura(ev.serialNumber, ev.message);
+      estado('leer','ok','Etiqueta leída. Sigue acercando etiquetas o detén la lectura.');
+      anotar('Lectura', ev.serialNumber, resumen(ultimaLectura.registros));
+    };
+    lector.onreadingerror = function(){
+      vibrar([40,60,40]);
+      estado('leer','error','No se pudo leer esa etiqueta. Aléjala y vuelve a acercarla despacio.');
+    };
+    lector.scan({ signal: abortoLectura.signal }).then(function(){
+      estado('leer','esperando','<strong>Esperando etiqueta…</strong><br>Acércala a la parte trasera del teléfono.');
+      $('#btnLeer').disabled = true;
+      $('#btnDetenerLeer').disabled = false;
+    }).catch(function(err){
+      estado('leer','error','No se pudo activar la lectura: '+(err && err.message ? err.message : 'error desconocido'));
+      abortoLectura = null;
+    });
+  });
+
+  $('#btnDetenerLeer').addEventListener('click', function(){
+    if(abortoLectura){ abortoLectura.abort(); abortoLectura = null; }
+    $('#btnLeer').disabled = false;
+    $('#btnDetenerLeer').disabled = true;
+    estado('leer','reposo','Lectura detenida.');
+  });
+
+  $('#btnCopiarTodo').addEventListener('click', function(){
+    if(!ultimaLectura) return;
+    var t = 'Serie: '+(ultimaLectura.serie||'')+'\n'+ultimaLectura.registros.map(function(d){
+      if(d.campos) return d.campos.map(function(p){ return p[0]+': '+p[1]; }).join('\n');
+      return d.titulo+': '+d.valor;
+    }).join('\n');
+    copiar(t);
+  });
+
+  /* ===================== TEXTO A GRABAR ===================== */
+  $('#textoGrabar').addEventListener('input', function(){ medir(); recordar(); });
+
+  $('#optNumerar').addEventListener('change', function(){
+    $('#cajaNumero').hidden = !this.checked;
+  });
+
+  function numeroActual(indice){
+    var base = $('#numInicial').value.trim() || '1';
+    var ancho = base.length;
+    var n = parseInt(base, 10);
+    if(isNaN(n)) n = 1;
+    var r = String(n + indice);
+    while(r.length < ancho) r = '0' + r;
+    return r;
+  }
+
+  function sustituir(txt, indice){
+    if(!$('#optNumerar').checked) return txt;
+    return String(txt).split('{n}').join(numeroActual(indice));
+  }
+
+  function armarMensaje(indice){
+    var t = sustituir($('#textoGrabar').value, indice).trim();
+    if(!t) return { records:[], resumen:'' };
+    return { records:[{ recordType:'text', lang:'es', encoding:'utf-8', data:t }], resumen:t };
+  }
+
+  function medir(){
+    var t = sustituir($('#textoGrabar').value, 0).trim();
+    var total = t ? bytesTexto(t) + bytesTexto('es') + 6 : 0;
+    var pista = total === 0 ? 'Falta el texto.'
+      : total > 872 ? 'No cabe ni en una NTAG216.'
+      : total > 492 ? 'Necesita una NTAG216.'
+      : total > 132 ? 'Necesita una NTAG215 o NTAG216.'
+      : 'Cabe en una NTAG213.';
+    $('#medida').innerHTML = 'Tamaño aproximado: <b>'+total+' bytes</b>. '+pista;
+  }
+
+  function recordar(){ guarda.poner('nfc_texto', $('#textoGrabar').value); }
+
+  function restaurarFormulario(){
+    var t = guarda.leer('nfc_texto');
+    if(typeof t === 'string') $('#textoGrabar').value = t;
+    medir();
+  }
+
+  /* ===================== ESCRITURA ===================== */
+  function botonesEscritura(activo){
+    $('#btnEscribir').disabled = activo;
+    $('#btnBorrar').disabled = activo || !soportado;
+    $('#btnBloquear').disabled = activo || !soportado;
+    $('#btnEscribirLista').disabled = activo || !soportado;
+    $('#btnDetenerEscribir').disabled = !activo;
+  }
+
+  function escribir(){
+    var primero = armarMensaje(0);
+    if(!primero.records.length){ return aviso('Primero escribe el texto que vas a grabar.'); }
+
+    enSerie = $('#optSerie').checked;
+    escritas = 0;
+    $('#contadorSerie').hidden = !enSerie;
+    if(enSerie) $('#contadorSerie').firstChild.textContent = '0';
+
+    var escritor;
+    try{ escritor = new NDEFReader(); }catch(e){ return aviso('No se pudo iniciar la escritura.'); }
+    abortoEscritura = new AbortController();
+    botonesEscritura(true);
+
+    var opciones = { overwrite: $('#optSobrescribir').checked, signal: abortoEscritura.signal };
+
+    function ciclo(){
+      var m = armarMensaje(escritas);
+      estado('escribir','esperando','<strong>Acerca la etiqueta ahora…</strong><br>'+(enSerie ? 'Etiqueta número '+(escritas+1) : 'No la retires hasta que confirme.'));
+      escritor.write({ records:m.records }, opciones).then(function(){
+        escritas++;
+        vibrar(80);
+        anotar('Escritura', '', m.resumen);
+        if(enSerie){
+          $('#contadorSerie').firstChild.textContent = String(escritas);
+          estado('escribir','ok','Etiqueta '+escritas+' grabada. Retírala y acerca la siguiente.');
+          setTimeout(function(){
+            if(abortoEscritura) ciclo();
+          }, 1400);
+        } else {
+          estado('escribir','ok','Etiqueta grabada correctamente.');
+          terminar();
+        }
+      }).catch(function(err){
+        if(err && err.name === 'AbortError'){ return; }
+        vibrar([40,60,40]);
+        estado('escribir','error','No se pudo grabar: '+(err && err.message ? err.message : 'error desconocido')+'<br>Revisa que la etiqueta no esté bloqueada y que el texto quepa.');
+        anotar('Error de escritura', '', (err && err.message) || 'error');
+        terminar();
+      });
+    }
+
+    function terminar(){
+      if(abortoEscritura){ abortoEscritura.abort(); abortoEscritura = null; }
+      botonesEscritura(false);
+    }
+    escribir.terminar = terminar;
+    ciclo();
+  }
+
+  $('#btnEscribir').addEventListener('click', escribir);
+
+  $('#btnDetenerEscribir').addEventListener('click', function(){
+    var eraLista = enLista;
+    enLista = false;
+    if(abortoEscritura){ abortoEscritura.abort(); abortoEscritura = null; }
+    botonesEscritura(false);
+    if(eraLista){
+      pintarLista();
+      estado('escribir','reposo','Lista detenida en la fila '+(indiceLista+1)+'. Puedes continuar después desde donde quedó.');
+    } else {
+      estado('escribir','reposo', enSerie && escritas ? 'Serie terminada: '+escritas+' etiqueta(s) grabada(s).' : 'Escritura cancelada.');
+    }
+  });
+
+  $('#btnBorrar').addEventListener('click', function(){
+    if(!confirm('Se va a borrar todo el contenido de la etiqueta que acerques. ¿Continuar?')) return;
+    var escritor;
+    try{ escritor = new NDEFReader(); }catch(e){ return aviso('No se pudo iniciar la escritura.'); }
+    abortoEscritura = new AbortController();
+    botonesEscritura(true);
+    estado('escribir','esperando','<strong>Acerca la etiqueta para borrarla…</strong>');
+    escritor.write({ records:[{ recordType:'empty' }] }, { overwrite:true, signal:abortoEscritura.signal })
+      .then(function(){
+        vibrar(80);
+        estado('escribir','ok','Etiqueta borrada.');
+        anotar('Borrado', '', 'etiqueta vaciada');
+      })
+      .catch(function(err){
+        if(err && err.name === 'AbortError') return;
+        estado('escribir','error','No se pudo borrar: '+(err && err.message ? err.message : 'error desconocido'));
+      })
+      .then(function(){
+        if(abortoEscritura){ abortoEscritura.abort(); abortoEscritura = null; }
+        botonesEscritura(false);
+      });
+  });
+
+  $('#btnBloquear').addEventListener('click', function(){
+    var escritor;
+    try{ escritor = new NDEFReader(); }catch(e){ return aviso('No se pudo iniciar la escritura.'); }
+    if(typeof escritor.makeReadOnly !== 'function'){
+      return aviso('Este navegador no puede bloquear etiquetas.');
+    }
+    if(!confirm('El bloqueo es PERMANENTE: la etiqueta quedará como sólo lectura y nunca podrá regrabarse. ¿Continuar?')) return;
+    abortoEscritura = new AbortController();
+    botonesEscritura(true);
+    estado('escribir','esperando','<strong>Acerca la etiqueta para bloquearla…</strong>');
+    escritor.makeReadOnly({ signal: abortoEscritura.signal })
+      .then(function(){
+        vibrar([80,60,80]);
+        estado('escribir','ok','Etiqueta bloqueada como sólo lectura.');
+        anotar('Bloqueo', '', 'etiqueta en sólo lectura');
+      })
+      .catch(function(err){
+        if(err && err.name === 'AbortError') return;
+        estado('escribir','error','No se pudo bloquear: '+(err && err.message ? err.message : 'error desconocido'));
+      })
+      .then(function(){
+        if(abortoEscritura){ abortoEscritura.abort(); abortoEscritura = null; }
+        botonesEscritura(false);
+      });
+  });
+
+  /* pasar lo leído al campo de escritura */
+  $('#btnClonar').addEventListener('click', function(){
+    if(!ultimaLectura) return;
+    var t = '';
+    ultimaLectura.registros.forEach(function(d){
+      if(!t && d.tipo === 'text' && d.valor) t = d.valor;
+    });
+    if(!t) return aviso('Esa etiqueta no trae texto que se pueda copiar.');
+    $('#textoGrabar').value = t;
+    medir(); recordar();
+    $$('nav.pestanas button').forEach(function(b){ if(b.dataset.tab === 'escribir') b.click(); });
+    aviso('Texto copiado al campo de escritura.');
+  });
+
+  /* ===================== LISTA DESDE ARCHIVO ===================== */
+  var filas = [];
+  var valores = [];
+  var indiceLista = 0;
+  var enLista = false;
+
+  function separador(linea){
+    var fuera = true, c = {',':0, ';':0, '\t':0};
+    for(var i=0;i<linea.length;i++){
+      var ch = linea[i];
+      if(ch === '"') fuera = !fuera;
+      else if(fuera && c[ch] !== undefined) c[ch]++;
+    }
+    if(c['\t'] >= c[';'] && c['\t'] >= c[',']) return '\t';
+    return c[';'] > c[','] ? ';' : ',';
+  }
+
+  function leerCSV(texto){
+    texto = texto.replace(/^\ufeff/, '');
+    var sep = separador(texto.split(/\r?\n/)[0] || '');
+    var res = [], fila = [], campo = '', dentro = false;
+    for(var i=0;i<texto.length;i++){
+      var ch = texto[i];
+      if(dentro){
+        if(ch === '"'){
+          if(texto[i+1] === '"'){ campo += '"'; i++; }
+          else dentro = false;
+        } else campo += ch;
+      } else if(ch === '"'){ dentro = true; }
+      else if(ch === sep){ fila.push(campo); campo = ''; }
+      else if(ch === '\n'){ fila.push(campo); res.push(fila); fila = []; campo = ''; }
+      else if(ch !== '\r'){ campo += ch; }
+    }
+    if(campo !== '' || fila.length){ fila.push(campo); res.push(fila); }
+    return res.filter(function(f){ return f.some(function(v){ return String(v).trim() !== ''; }); });
+  }
+
+  function cargarXLSX(){
+    return new Promise(function(res, rej){
+      if(window.XLSX) return res(window.XLSX);
+      var sc = document.createElement('script');
+      sc.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      sc.onload = function(){ window.XLSX ? res(window.XLSX) : rej(new Error('no disponible')); };
+      sc.onerror = function(){ rej(new Error('sin conexion')); };
+      document.head.appendChild(sc);
+    });
+  }
+
+  function letraColumna(i){
+    var s = '';
+    i = i + 1;
+    while(i > 0){ var r = (i - 1) % 26; s = String.fromCharCode(65 + r) + s; i = Math.floor((i - 1) / 26); }
+    return s;
+  }
+
+  function pintarColumnas(){
+    var ancho = 0;
+    filas.forEach(function(f){ if(f.length > ancho) ancho = f.length; });
+    var conTitulos = $('#optEncabezado').checked;
+    var sel = $('#selColumna');
+    var previo = sel.value;
+    sel.innerHTML = '';
+    for(var i=0;i<ancho;i++){
+      var t = 'Columna '+letraColumna(i);
+      if(conTitulos && filas[0] && String(filas[0][i] || '').trim()) t = String(filas[0][i]).trim();
+      var op = document.createElement('option');
+      op.value = String(i);
+      op.textContent = t;
+      sel.appendChild(op);
+    }
+    if(previo && previo < ancho) sel.value = previo;
+    $('#cajaColumna').hidden = false;
+    armarValores();
+  }
+
+  function armarValores(){
+    var col = parseInt($('#selColumna').value, 10) || 0;
+    var desde = $('#optEncabezado').checked ? 1 : 0;
+    valores = [];
+    for(var i=desde;i<filas.length;i++){
+      var v = String(filas[i][col] == null ? '' : filas[i][col]).trim();
+      if(v) valores.push({ texto:v, estado:'pendiente' });
+    }
+    indiceLista = 0;
+    $('#avanceLista').hidden = !valores.length;
+    pintarLista();
+    if(!valores.length) aviso('Esa columna no tiene textos.');
+  }
+
+  function cuentaLista(){
+    var g = 0, o = 0;
+    valores.forEach(function(v){ if(v.estado === 'grabada') g++; else if(v.estado === 'omitida') o++; });
+    return { grabadas:g, omitidas:o, total:valores.length };
+  }
+
+  function pintarLista(){
+    var c = cuentaLista();
+    $('#avanceNum').innerHTML = c.grabadas + '<small>de ' + c.total + ' filas grabadas' + (c.omitidas ? ' · ' + c.omitidas + ' omitidas' : '') + '</small>';
+    while(indiceLista < valores.length && valores[indiceLista].estado !== 'pendiente') indiceLista++;
+    var actual = valores[indiceLista];
+    $('#filaActual').innerHTML = actual
+      ? 'Sigue la fila ' + (indiceLista + 1) + ': <b>' + escapar(actual.texto) + '</b>'
+      : 'Ya no quedan filas pendientes.';
+    var ol = $('#olFilas');
+    if($('#detalleFilas').open || valores.length <= 60){
+      var tope = Math.min(valores.length, 500);
+      var html = '';
+      for(var i=0;i<tope;i++){
+        var v = valores[i];
+        html += '<li data-est="'+v.estado+'">'+escapar(v.texto)+(v.estado === 'pendiente' ? '' : ' ('+v.estado+')')+'</li>';
+      }
+      if(valores.length > tope) html += '<li>… y '+(valores.length - tope)+' más</li>';
+      ol.innerHTML = html;
+    }
+    guardarAvance();
+  }
+
+  function guardarAvance(){
+    if(valores.length && valores.length <= 3000) guarda.poner('nfc_lista', { valores:valores, indice:indiceLista });
+    else guarda.poner('nfc_lista', null);
+  }
+
+  $('#detalleFilas').addEventListener('toggle', function(){ if(this.open) pintarLista(); });
+  $('#optEncabezado').addEventListener('change', pintarColumnas);
+  $('#selColumna').addEventListener('change', armarValores);
+
+  $('#archivoLista').addEventListener('change', function(){
+    var f = this.files && this.files[0];
+    if(!f) return;
+    var nombre = f.name.toLowerCase();
+    if(/\.(xlsx|xlsm|xls)$/.test(nombre)){
+      aviso('Leyendo el Excel…');
+      cargarXLSX().then(function(XLSX){
+        var fr = new FileReader();
+        fr.onload = function(){
+          try{
+            var libro = XLSX.read(new Uint8Array(fr.result), { type:'array' });
+            var hoja = libro.Sheets[libro.SheetNames[0]];
+            filas = XLSX.utils.sheet_to_json(hoja, { header:1, blankrows:false, raw:false, defval:'' });
+            filas = filas.filter(function(fila){ return fila.some(function(v){ return String(v).trim() !== ''; }); });
+            if(!filas.length) return aviso('El Excel está vacío.');
+            pintarColumnas();
+            aviso(filas.length+' fila(s) leídas de '+libro.SheetNames[0]+'.');
+          }catch(e){ aviso('No se pudo leer el Excel. Guárdalo como CSV e inténtalo así.'); }
+        };
+        fr.readAsArrayBuffer(f);
+      }).catch(function(){
+        aviso('Para leer Excel hace falta conexión la primera vez. Guarda el archivo como CSV y súbelo así.');
+      });
+    } else {
+      var fr = new FileReader();
+      fr.onload = function(){
+        filas = leerCSV(String(fr.result));
+        if(!filas.length) return aviso('El archivo está vacío.');
+        pintarColumnas();
+        aviso(filas.length+' fila(s) leídas.');
+      };
+      fr.readAsText(f, 'utf-8');
+    }
+  });
+
+  $('#btnReiniciarLista').addEventListener('click', function(){
+    if(!valores.length) return;
+    if(!confirm('¿Marcar todas las filas como pendientes otra vez?')) return;
+    valores.forEach(function(v){ v.estado = 'pendiente'; });
+    indiceLista = 0;
+    pintarLista();
+  });
+
+  $('#btnQuitarLista').addEventListener('click', function(){
+    if(enLista) return aviso('Primero detén la escritura de la lista.');
+    filas = []; valores = []; indiceLista = 0;
+    $('#archivoLista').value = '';
+    $('#cajaColumna').hidden = true;
+    $('#avanceLista').hidden = true;
+    guarda.poner('nfc_lista', null);
+  });
+
+  $('#btnSaltar').addEventListener('click', function(){
+    if(!valores.length) return;
+    if(indiceLista < valores.length){
+      valores[indiceLista].estado = 'omitida';
+      indiceLista++;
+    }
+    pintarLista();
+    if(enLista){
+      enLista = false;
+      if(abortoEscritura){ abortoEscritura.abort(); abortoEscritura = null; }
+      botonesEscritura(false);
+      setTimeout(escribirLista, 250);
+    }
+  });
+
+  function escribirLista(){
+    if(!valores.length) return aviso('Primero sube un archivo con los textos.');
+    var c = cuentaLista();
+    if(c.grabadas + c.omitidas >= c.total) return aviso('Ya no quedan filas pendientes.');
+    var escritor;
+    try{ escritor = new NDEFReader(); }catch(e){ return aviso('No se pudo iniciar la escritura.'); }
+    abortoEscritura = new AbortController();
+    enLista = true;
+    botonesEscritura(true);
+    $('#contadorSerie').hidden = true;
+    var opciones = { overwrite: $('#optSobrescribir').checked, signal: abortoEscritura.signal };
+
+    function siguiente(){
+      while(indiceLista < valores.length && valores[indiceLista].estado !== 'pendiente') indiceLista++;
+      if(indiceLista >= valores.length){
+        var f = cuentaLista();
+        enLista = false;
+        if(abortoEscritura){ abortoEscritura.abort(); abortoEscritura = null; }
+        botonesEscritura(false);
+        pintarLista();
+        vibrar([90,70,90]);
+        estado('escribir','ok','Lista terminada: '+f.grabadas+' de '+f.total+' etiquetas grabadas.');
+        return;
+      }
+      var v = valores[indiceLista];
+      estado('escribir','esperando','<strong>Acerca la etiqueta para la fila '+(indiceLista+1)+' de '+valores.length+'</strong><br>'+escapar(v.texto));
+      escritor.write({ records:[{ recordType:'text', lang:'es', encoding:'utf-8', data:v.texto }] }, opciones).then(function(){
+        v.estado = 'grabada';
+        vibrar(80);
+        anotar('Escritura', '', v.texto);
+        indiceLista++;
+        pintarLista();
+        estado('escribir','ok','Fila '+indiceLista+' grabada. Retira la etiqueta y acerca la siguiente.');
+        setTimeout(function(){ if(enLista && abortoEscritura) siguiente(); }, 1400);
+      }).catch(function(err){
+        if(err && err.name === 'AbortError') return;
+        vibrar([40,60,40]);
+        anotar('Error de escritura', '', v.texto);
+        enLista = false;
+        if(abortoEscritura){ abortoEscritura.abort(); abortoEscritura = null; }
+        botonesEscritura(false);
+        estado('escribir','error','No se pudo grabar la fila '+(indiceLista+1)+': '+(err && err.message ? err.message : 'error desconocido')+'<br>Toca Escribir la lista para reintentar esa misma fila.');
+      });
+    }
+    siguiente();
+  }
+
+  $('#btnEscribirLista').addEventListener('click', escribirLista);
+
+  function restaurarLista(){
+    var g = guarda.leer('nfc_lista');
+    if(g && g.valores && g.valores.length){
+      valores = g.valores;
+      indiceLista = g.indice || 0;
+      $('#avanceLista').hidden = false;
+      pintarLista();
+      var c = cuentaLista();
+      if(c.grabadas + c.omitidas < c.total) aviso('Se recuperó la lista anterior: '+c.grabadas+' de '+c.total+' grabadas.');
+    }
+  }
+
+  /* ===================== REGISTRO ===================== */
+  function anotar(accion, serie, resumenTxt){
+    var d = new Date();
+    movimientos.unshift({ fecha:fechaHora(d), hora:hora(d), accion:accion, serie:serie||'', resumen:resumenTxt||'' });
+    if(movimientos.length > 300) movimientos.pop();
+    guarda.poner('nfc_movimientos', movimientos);
+    pintarRegistro();
+  }
+
+  function pintarRegistro(){
+    var ul = $('#listaRegistro');
+    if(!movimientos.length){
+      ul.innerHTML = '<li><p class="vacio">Todavía no hay movimientos.</p></li>';
+      $('#resumenRegistro').textContent = 'Aquí se anota cada lectura y cada escritura, con hora y número de serie.';
+      return;
+    }
+    ul.innerHTML = movimientos.map(function(m){
+      return '<li><div class="meta"><b>'+escapar(m.accion)+'</b><span>'+escapar(m.hora)+'</span>'+
+        (m.serie ? '<span class="chip">'+escapar(m.serie)+'</span>' : '')+
+        '</div><div class="res">'+escapar(m.resumen)+'</div></li>';
+    }).join('');
+    var lecturas = movimientos.filter(function(m){ return m.accion === 'Lectura'; }).length;
+    var escrituras = movimientos.filter(function(m){ return m.accion === 'Escritura'; }).length;
+    $('#resumenRegistro').textContent = lecturas+' lectura(s) y '+escrituras+' escritura(s) en este registro.';
+  }
+
+  $('#btnCSV').addEventListener('click', function(){
+    if(!movimientos.length) return aviso('No hay movimientos para descargar.');
+    var q = function(v){ return '"'+String(v).split('"').join('""')+'"'; };
+    var lineas = [['Fecha y hora','Accion','Numero de serie','Contenido'].map(q).join(',')];
+    movimientos.forEach(function(m){
+      lineas.push([m.fecha, m.accion, m.serie, m.resumen].map(q).join(','));
+    });
+    var blob = new Blob(['\ufeff'+lineas.join('\r\n')], {type:'text/csv;charset=utf-8'});
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'registro_nfc.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function(){ URL.revokeObjectURL(a.href); }, 2000);
+  });
+
+  $('#btnLimpiar').addEventListener('click', function(){
+    if(!movimientos.length) return;
+    if(!confirm('¿Vaciar el registro de movimientos?')) return;
+    movimientos = [];
+    guarda.poner('nfc_movimientos', movimientos);
+    pintarRegistro();
+  });
+
+  /* ===================== ARRANQUE ===================== */
+  revisarSoporte();
+  restaurarFormulario();
+  restaurarLista();
+  var previos = guarda.leer('nfc_movimientos');
+  if(previos && previos.length){ movimientos = previos; }
+  pintarRegistro();
+})();
+</script>
+</body>
+</html>
