@@ -1,4 +1,4 @@
-const CACHE = 'nfc-v7';
+const CACHE = 'nfc-v8';
 const ARCHIVOS = ['./', './manifest.json', './icono-192.png', './icono-512.png'];
 
 self.addEventListener('install', e => {
